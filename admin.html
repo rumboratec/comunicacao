@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>MASTER INTERCOM CONTROL</title>
+    <style>
+        :root { 
+            --bg-main: #0c0f12; --panel-bg: #141920; --panel-border: #232b35;
+            --accent-cyan: #00e5ff; --accent-green: #00e676; --accent-red: #ff3d00; 
+            --text-bright: #ffffff; --text-dark: #64748b; --font-mono: 'Courier New', Courier, monospace;
+        }
+        body { font-family: -apple-system, sans-serif; background-color: var(--bg-main); color: var(--text-bright); padding: 20px; margin: 0; user-select: none; }
+        
+        /* Módulo de Login */
+        .login-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #07090d; display: flex; align-items: center; justify-content: center; z-index: 999; }
+        .login-box { background: var(--panel-bg); border: 1px solid var(--panel-border); padding: 40px; border-radius: 8px; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
+        .login-box h2 { font-size: 16px; letter-spacing: 2px; color: var(--accent-cyan); margin-bottom: 24px; text-transform: uppercase; }
+        .login-input { width: 100%; padding: 12px; background: #090d12; border: 1px solid var(--panel-border); color: #fff; border-radius: 4px; margin-bottom: 16px; box-sizing: border-box; }
+        .login-btn { width: 100%; padding: 14px; background: transparent; border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-weight: bold; cursor: pointer; text-transform: uppercase; border-radius: 4px; }
+        .login-btn:hover { background: var(--accent-cyan); color: #000; }
+        .login-error { color: var(--accent-red); font-size: 12px; margin-top: 10px; display: none; }
+        
+        .mcr-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--panel-border); padding-bottom: 12px; margin-bottom: 20px; }
+        .mcr-title { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
+        
+        /* Painel de Configuração de Hardware de Áudio */
+        .audio-config-rack { background: #1a222d; border: 2px solid var(--panel-border); border-radius: 6px; padding: 16px; margin-bottom: 20px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+        .rack-title-blue { font-size: 12px; font-weight: 800; color: var(--accent-cyan); letter-spacing: 1px; margin-bottom: 14px; text-transform: uppercase; }
+        .config-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+        .select-hardware { background: #090d12; color: #fff; border: 1px solid var(--panel-border); padding: 8px; border-radius: 4px; font-size: 13px; min-width: 280px; }
+        .matrix-router { display: flex; gap: 16px; background: #090d12; padding: 10px 16px; border-radius: 4px; border: 1px solid var(--panel-border); }
+        .router-cell { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: bold; color: #94a3b8; }
+        .select-channel { background: #141920; color: var(--accent-green); border: 1px solid var(--panel-border); padding: 4px; font-size: 12px; border-radius: 3px; font-family: var(--font-mono); font-weight: bold; }
+        
+        /* Containers de VU */
+        .vu-container { display: flex; gap: 2px; height: 8px; background: #090d12; padding: 3px; border-radius: 3px; border: 1px solid #1e293b; box-sizing: border-box; }
+        .vu-bar { flex: 1; height: 100%; background: #1e293b; transition: background 0.05s ease; }
+        
+        .master-bar { display: flex; gap: 12px; margin-bottom: 24px; background: var(--panel-bg); padding: 12px; border-radius: 6px; border: 1px solid var(--panel-border); }
+        .btn-mcr { padding: 10px 20px; font-weight: 700; font-size: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer; text-transform: uppercase; }
+        .btn-talk-all { background: #162e24; color: var(--accent-green); border-color: var(--accent-green); }
+        .btn-talk-all.active { background: var(--accent-green); color: #000; }
+        .btn-mute-all { background: #361b17; color: var(--accent-red); border-color: var(--accent-red); }
+        .btn-mute-all.active { background: var(--accent-red); color: #fff; }
+        
+        .matrix-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-bottom: 30px; }
+        .rack-unit { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 6px; padding: 14px; position: relative; }
+        .rack-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .unit-name { font-size: 14px; font-weight: 700; text-transform: uppercase; }
+        .unit-timer { font-family: var(--font-mono); font-size: 12px; color: var(--accent-cyan); background: #090d12; padding: 2px 6px; border-radius: 3px; }
+        .room-badge { font-size: 11px; font-weight: bold; color: var(--text-dark); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+        .select-matrix-room { background: #090d12; color: #fff; border: 1px solid var(--panel-border); padding: 2px 6px; font-size: 11px; border-radius: 4px; }
+        
+        .keypad { display: flex; flex-direction: column; gap: 8px; }
+        .key-row { display: flex; gap: 8px; }
+        .key-btn { flex: 1; padding: 10px 0; font-size: 11px; font-weight: 800; text-transform: uppercase; border-radius: 4px; border: 1px solid rgba(0,0,0,0.4); cursor: pointer; text-align: center; }
+        .key-talk { background: #1e293b; color: #94a3b8; border-bottom: 3px solid #0f172a; }
+        .key-talk.active { background: var(--accent-cyan); color: #000; }
+        .key-listen-on { background: #1e293b; color: #94a3b8; border-bottom: 3px solid #0f172a; }
+        .key-listen-on.active { background: var(--accent-green); color: #000; }
+        .key-listen-off { background: #1e293b; color: #94a3b8; border-bottom: 3px solid #0f172a; }
+        .key-listen-off.active { background: #331c1c; color: var(--accent-red); border-color: var(--accent-red); }
+        .btn-kick { background: rgba(255, 61, 0, 0.1); color: var(--accent-red); border: 1px solid var(--accent-red); width: 100%; padding: 6px; font-size: 10px; font-weight: bold; cursor: pointer; text-transform: uppercase; border-radius: 4px; margin-top: 4px; }
+        .btn-kick:hover { background: var(--accent-red); color: #fff; }
+        
+        .log-section { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 6px; padding: 16px; }
+        .log-title { font-size: 13px; font-weight: 800; color: #94a3b8; margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase; }
+        .log-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
+        .log-table th { background: #090d12; padding: 8px; color: var(--text-dark); border: 1px solid var(--panel-border); text-align: left; }
+        .log-table td { padding: 8px; border: 1px solid var(--panel-border); color: #cbd5e1; }
+        .log-active-row { color: var(--accent-green) !important; }
+    </style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+    <div class="login-box">
+        <h2>MCR MATRIX LOGIN</h2>
+        <input type="text" id="userInput" class="login-input" placeholder="USUÁRIO" autocomplete="off">
+        <input type="password" id="passInput" class="login-input" placeholder="SENHA">
+        <button class="login-btn" id="loginBtn">ENTER SYSTEM</button>
+        <div class="login-error" id="loginError"></div>
+    </div>
+</div>
+
+<div class="mcr-header">
+    <div class="mcr-title">MASTER INTERCOM MATRIX CENTRAL</div>
+    <div style="font-family: var(--font-mono); font-size: 12px;">NET ADDR: <span style="color:var(--accent-cyan);">192.168.1.20:6071</span></div>
+</div>
+
+<div class="audio-config-rack">
+    <div class="rack-title-blue">I/O HARDWARE MATRIX ROUTER (CONFIGURAÇÃO DE PLACA USB)</div>
+    <div class="config-row">
+        <div>
+            <label style="font-size:11px; display:block; margin-bottom:4px; font-weight:bold; color:#64748b;">DISPOSITIVO DE ENTRADA (USB INTERFACE):</label>
+            <select id="hardwareInputSelect" class="select-hardware">
+                <option value="">Carregando interfaces de áudio...</option>
+            </select>
+        </div>
+        
+        <div class="matrix-router">
+            <div class="router-cell">
+                <label>FONTE MATRIZ RM A:</label>
+                <select id="routeRmA" class="select-channel" onchange="remapearCanaisAudio()">
+                    <option value="0">CANAL 1 (Input 1)</option>
+                    <option value="1">CANAL 2 (Input 2)</option>
+                    <option value="2">CANAL 3 (Input 3)</option>
+                    <option value="3">CANAL 4 (Input 4)</option>
+                    <option value="4">CANAL 5</option>
+                    <option value="5">CANAL 6</option>
+                </select>
+                <div class="vu-container" id="hardware-vu-A" style="margin-top:5px; height:6px; width:120px;">
+                    <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                </div>
+            </div>
+            <div class="router-cell">
+                <label>FONTE MATRIZ RM B:</label>
+                <select id="routeRmB" class="select-channel" onchange="remapearCanaisAudio()">
+                    <option value="0">CANAL 1 (Input 1)</option>
+                    <option value="1" selected>CANAL 2 (Input 2)</option>
+                    <option value="2">CANAL 3 (Input 3)</option>
+                    <option value="3">CANAL 4 (Input 4)</option>
+                    <option value="4">CANAL 5</option>
+                    <option value="5">CANAL 6</option>
+                </select>
+                <div class="vu-container" id="hardware-vu-B" style="margin-top:5px; height:6px; width:120px;">
+                    <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                </div>
+            </div>
+            <div class="router-cell">
+                <label>FONTE MATRIZ RM C:</label>
+                <select id="routeRmC" class="select-channel" onchange="remapearCanaisAudio()">
+                    <option value="0">CANAL 1 (Input 1)</option>
+                    <option value="1">CANAL 2 (Input 2)</option>
+                    <option value="2" selected>CANAL 3 (Input 3)</option>
+                    <option value="3">CANAL 4 (Input 4)</option>
+                    <option value="4">CANAL 5</option>
+                    <option value="5">CANAL 6</option>
+                </select>
+                <div class="vu-container" id="hardware-vu-C" style="margin-top:5px; height:6px; width:120px;">
+                    <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="master-bar">
+    <button class="btn-mcr btn-talk-all" id="talkAllBtn">Master Talk All</button>
+    <button class="btn-mcr btn-mute-all" id="muteAllBtn">Master Mute Feeds</button>
+</div>
+
+<div class="matrix-grid" id="intercomGrid"></div>
+
+<div class="log-section">
+    <div class="log-title">SESSION LOG HISTORIAN (LOGS DE TRANSMISSÃO)</div>
+    <table class="log-table">
+        <thead>
+            <tr><th>Operador Remoto</th><th>Entrada</th><th>Saída</th><th>Status</th></tr>
+        </thead>
+        <tbody id="logTableBody">
+            <tr><td colspan="4" style="text-align: center; color: var(--text-dark);">Nenhum log registrado.</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div id="audioPeers" style="display:none;"></div>
+
+<script>
+    const SIGNALING_URL = 'ws://192.168.1.20:6071';
+    let ws, globalAudioCtx, hardwareStream;
+    let channelSplitter = null;
+    let activeHardwareProcessors = [];
+    
+    const streamsPorSala = { 'A': null, 'B': null, 'C': null };
+    const peerConnections = new Map();
+    const audioElements = new Map();
+    const connectionTimestamps = new Map(); 
+
+    window.addEventListener('load', () => {
+        ws = new WebSocket(SIGNALING_URL);
+        
+        ws.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+            if (data.action === 'login-sucesso') {
+                document.getElementById('loginScreen').style.display = 'none';
+                solicitarPermissaoEListarHardware();
+            }
+            if (data.action === 'login-falha') {
+                const err = document.getElementById('loginError');
+                err.innerText = data.erro; err.style.display = 'block';
+            }
+            if (data.action === 'lista-reporteres') renderizarPainel(data.lista);
+            if (data.action === 'atualizar-logs') atualizarTabelaLogs(data.logs);
+
+            if (data.sdp && data.sdp.type === 'answer') {
+                const pc = peerConnections.get(data.sender);
+                if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            } else if (data.ice) {
+                const pc = peerConnections.get(data.sender);
+                if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.ice));
+            }
+        };
+    });
+
+    document.getElementById('loginBtn').addEventListener('click', () => {
+        const user = document.getElementById('userInput').value;
+        const pass = document.getElementById('passInput').value;
+        ws.send(JSON.stringify({ action: 'login-admin', user, pass }));
+    });
+
+    async function solicitarPermissaoEListarHardware() {
+        try {
+            const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            tempStream.getTracks().forEach(t => t.stop());
+            
+            const dispositivos = await navigator.mediaDevices.enumerateDevices();
+            const entradasAudio = dispositivos.filter(d => d.kind === 'audioinput');
+            
+            const select = document.getElementById('hardwareInputSelect');
+            select.innerHTML = '';
+            
+            entradasAudio.forEach(disp => {
+                const opt = document.createElement('option');
+                opt.value = disp.deviceId;
+                opt.innerText = disp.label || `Interface USB (${disp.deviceId.substring(0,5)})`;
+                select.appendChild(opt);
+            });
+
+            select.addEventListener('change', () => inicializarFluxoPlacaUSB(select.value));
+            
+            if(entradasAudio.length > 0) {
+                await inicializarFluxoPlacaUSB(entradasAudio[0].deviceId);
+            }
+            
+            setInterval(atualizarCronometrosLocais, 1000);
+        } catch(e) {
+            alert("MCR Hardware Error: Falha ao inicializar subsistema de som.");
+        }
+    }
+
+    async function inicializarFluxoPlacaUSB(deviceId) {
+        try {
+            if(hardwareStream) hardwareStream.getTracks().forEach(t => t.stop());
+
+            hardwareStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    deviceId: { exact: deviceId },
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                    channelCount: 8 
+                },
+                video: false
+            });
+
+            globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // DESBLOQUEIO CRÍTICO: Força o motor de áudio a acordar imediatamente
+            if (globalAudioCtx.state === 'suspended') {
+                await globalAudioCtx.resume();
+            }
+
+            const source = globalAudioCtx.createMediaStreamSource(hardwareStream);
+            
+            channelSplitter = globalAudioCtx.createChannelSplitter(8);
+            source.connect(channelSplitter);
+
+            remapearCanaisAudio();
+            inicializarVusDeEntrada();
+            
+            console.log("MCR Master Multi-channel Engine Conectado.");
+        } catch (err) {
+            console.error("Erro ao engajar fluxo de hardware", err);
+        }
+    }
+
+    function remapearCanaisAudio() {
+        if (!globalAudioCtx || !channelSplitter) return;
+
+        const canalRmA = parseInt(document.getElementById('routeRmA').value);
+        const canalRmB = parseInt(document.getElementById('routeRmB').value);
+        const canalRmC = parseInt(document.getElementById('routeRmC').value);
+
+        const mapeamento = { 'A': canalRmA, 'B': canalRmB, 'C': canalRmC };
+
+        for (let sala in mapeamento) {
+            const canalFisicoIndex = mapeamento[sala];
+            const dest = globalAudioCtx.createMediaStreamDestination();
+            channelSplitter.connect(dest, canalFisicoIndex, 0);
+            streamsPorSala[sala] = dest.stream;
+        }
+
+        peerConnections.forEach((pc, id) => {
+            const card = document.getElementById(`card-${id}`);
+            if(card) {
+                const salaAtualDoRep = card.querySelector('.select-matrix-room').value;
+                const novaTrack = streamsPorSala[salaAtualDoRep].getAudioTracks()[0];
+                const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+                if(sender && novaTrack) sender.replaceTrack(novaTrack);
+            }
+        });
+    }
+
+    function inicializarVusDeEntrada() {
+        if (!globalAudioCtx || !channelSplitter) return;
+
+        // Desconecta processadores residuais para evitar duplicidade de tarefas
+        activeHardwareProcessors.forEach(p => { try{ p.disconnect(); }catch(e){} });
+        activeHardwareProcessors = [];
+
+        // Limita o monitoramento estritamente para os canais associados à RM A, B e C
+        const salas = ['A', 'B', 'C'];
+        
+        salas.forEach(sala => {
+            const processor = globalAudioCtx.createScriptProcessor(2048, 1, 1);
+            activeHardwareProcessors.push(processor);
+            
+            // Circuito Fantasma: Impede que o navegador congele o processamento dos VUs por inatividade
+            const phantomGain = globalAudioCtx.createGain();
+            phantomGain.gain.value = 0.0; 
+
+            const selectElement = document.getElementById(`routeRm${sala}`);
+            
+            const conectarVUEspecifico = () => {
+                try { 
+                    processor.disconnect(); 
+                    phantomGain.disconnect();
+                } catch(e){}
+                
+                const canalFisicoIndex = parseInt(selectElement.value);
+                channelSplitter.connect(processor, canalFisicoIndex, 0);
+                
+                // Rota forçada para o barramento de áudio real do sistema
+                processor.connect(phantomGain);
+                phantomGain.connect(globalAudioCtx.destination);
+            };
+
+            conectarVUEspecifico();
+            selectElement.removeEventListener('change', conectarVUEspecifico);
+            selectElement.addEventListener('change', conectarVUEspecifico);
+
+            processor.onaudioprocess = (e) => {
+                const input = e.inputBuffer.getChannelData(0);
+                let sum = 0.0;
+                for (let i = 0; i < input.length; ++i) sum += input[i] * input[i];
+                const volume = Math.sqrt(sum / input.length) * 100;
+                
+                const segments = document.querySelectorAll(`#hardware-vu-${sala} .vu-bar`);
+                const ativos = Math.min(segments.length, Math.floor(volume / 2));
+                
+                segments.forEach((seg, idx) => {
+                    seg.style.background = idx < ativos ? (idx > 9 ? 'var(--accent-red)' : idx > 7 ? 'orange' : 'var(--accent-green)') : '#1e293b';
+                });
+            };
+        });
+    }
+
+    function criarConexaoComReporter(id, salaDoReporter) {
+        if (peerConnections.has(id)) return;
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        peerConnections.set(id, pc);
+
+        const streamMapeadoParaSala = streamsPorSala[salaDoReporter];
+        if (streamMapeadoParaSala && streamMapeadoParaSala.getAudioTracks().length > 0) {
+            pc.addTrack(streamMapeadoParaSala.getAudioTracks()[0], streamMapeadoParaSala);
+        }
+
+        pc.onicecandidate = (e) => {
+            if (e.candidate) ws.send(JSON.stringify({ target: id, ice: e.candidate }));
+        };
+
+        pc.ontrack = (e) => {
+            let audio = document.getElementById(`audio-${id}`);
+            if (!audio) {
+                audio = document.createElement('audio');
+                audio.id = `audio-${id}`; audio.autoplay = true; audio.muted = true; 
+                document.getElementById('audioPeers').appendChild(audio);
+                vincularVuMeter(e.streams[0], id);
+            }
+            audio.srcObject = e.streams[0];
+            audioElements.set(id, audio);
+        };
+
+        setTimeout(async () => {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ target: id, sdp: pc.localDescription }));
+        }, 400);
+    }
+
+    function renderizarPainel(lista) {
+        const grid = document.getElementById('intercomGrid');
+        lista.forEach(rep => {
+            let card = document.getElementById(`card-${rep.id}`);
+            if (!card) {
+                if (!connectionTimestamps.has(rep.id)) connectionTimestamps.set(rep.id, Date.now());
+                card = document.createElement('div');
+                card.className = 'rack-unit';
+                card.id = `card-${rep.id}`;
+                card.innerHTML = `
+                    <div class="rack-header">
+                        <div class="unit-name">${rep.nome}</div>
+                        <div class="unit-timer" id="timer-${rep.id}">00:00:00</div>
+                    </div>
+                    <div class="room-badge">
+                        <span>MATRIX RM:</span>
+                        <select class="select-matrix-room" onchange="alterarSalaRemota('${rep.id}', this.value)">
+                            <option value="A" ${rep.sala === 'A' ? 'selected' : ''}>RM A</option>
+                            <option value="B" ${rep.sala === 'B' ? 'selected' : ''}>RM B</option>
+                            <option value="C" ${rep.sala === 'C' ? 'selected' : ''}>RM C</option>
+                        </select>
+                    </div>
+                    <div class="vu-container" id="vu-${rep.id}">
+                        <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                    </div>
+                    <div class="keypad" style="margin-top:14px;">
+                        <button class="key-btn key-talk" id="talk-${rep.id}" onclick="alternarFala('${rep.id}')">TALK (VOX)</button>
+                        <div class="key-row">
+                            <button class="key-btn key-listen-on" id="entrar-${rep.id}" onclick="controlarFluxo('${rep.id}', 'entrar')">ON AIR</button>
+                            <button class="key-btn key-listen-off active" id="sair-${rep.id}" onclick="controlarFluxo('${rep.id}', 'sair')">MUTED</button>
+                        </div>
+                        <button class="btn-kick" onclick="expulsarUsuario('${rep.id}')">DISMISS (KICK)</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+                criarConexaoComReporter(rep.id, rep.sala);
+            }
+        });
+
+        for (let id of peerConnections.keys()) {
+            if (!lista.some(r => r.id === id)) {
+                peerConnections.get(id).close(); peerConnections.delete(id);
+                audioElements.delete(id); connectionTimestamps.delete(id);
+                document.getElementById(`audio-${id}`)?.remove();
+                document.getElementById(`card-${id}`)?.remove();
+            }
+        }
+    }
+
+    function alterarSalaRemota(id, novaSala) { 
+        ws.send(JSON.stringify({ action: 'trocar-sala', target: id, novaSala }));
+        const pc = peerConnections.get(id);
+        if(pc && streamsPorSala[novaSala]) {
+            const novaTrack = streamsPorSala[novaSala].getAudioTracks()[0];
+            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+            if(sender && novaTrack) sender.replaceTrack(novaTrack);
+        }
+    }
+
+    function expulsarUsuario(id) {
+        if(confirm("Expulsar permanentemente este operador do Intercom?")) {
+            ws.send(JSON.stringify({ action: 'kick-user', target: id }));
+        }
+    }
+
+    function atualizarTabelaLogs(logs) {
+        const tbody = document.getElementById('logTableBody');
+        if (logs.length === 0) return;
+        tbody.innerHTML = logs.slice().reverse().map(log => {
+            const isActive = log.saida.includes('Ativo');
+            return `<tr>
+                <td>${log.nome}</td><td>${log.entrada}</td>
+                <td class="${isActive ? 'log-active-row' : ''}">${log.saida}</td>
+                <td class="${isActive ? 'log-active-row' : ''}">${isActive ? 'ONLINE' : 'TERMINATED'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function atualizarCronometrosLocais() {
+        connectionTimestamps.forEach((timestamp, id) => {
+            const timerEl = document.getElementById(`timer-${id}`);
+            if (!timerEl) return;
+            const diffSecs = Math.floor((Date.now() - timestamp) / 1000);
+            const hrs = String(Math.floor(diffSecs / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((diffSecs % 3600) / 60)).padStart(2, '0');
+            const secs = String(diffSecs % 60).padStart(2, '0');
+            timerEl.innerText = `${hrs}:${mins}:${secs}`;
+        });
+    }
+
+    function alternarFala(id, forcarEstado = null) {
+        const btn = document.getElementById(`talk-${id}`);
+        if (!btn) return;
+        if (forcarEstado !== null) {
+            if (forcarEstado) btn.classList.add('active'); else btn.classList.remove('active');
+        } else { btn.classList.toggle('active'); }
+        ws.send(JSON.stringify({ action: 'comando-audio', target: id, comando: btn.classList.contains('active') ? 'talk' : 'mute' }));
+    }
+
+    function controlarFluxo(id, acao) {
+        const btnEntrar = document.getElementById(`entrar-${id}`);
+        const btnSair = document.getElementById(`sair-${id}`);
+        const audio = audioElements.get(id);
+        if (acao === 'entrar') {
+            btnEntrar.classList.add('active'); btnSair.classList.remove('active');
+            if (audio) audio.muted = false;
+        } else {
+            btnSair.classList.add('active'); btnEntrar.classList.remove('active');
+            if (audio) audio.muted = true;
+        }
+    }
+
+    document.getElementById('talkAllBtn').addEventListener('click', function() {
+        this.classList.toggle('active');
+        for (let id of peerConnections.keys()) alternarFala(id, this.classList.contains('active'));
+    });
+
+    document.getElementById('muteAllBtn').addEventListener('click', function() {
+        this.classList.toggle('active');
+        for (let id of peerConnections.keys()) controlarFluxo(id, this.classList.contains('active') ? 'sair' : 'entrar');
+    });
+
+    function vincularVuMeter(stream, id) {
+        if (!globalAudioCtx) return;
+        const source = globalAudioCtx.createMediaStreamSource(stream);
+        const processor = globalAudioCtx.createScriptProcessor(2048, 1, 1);
+        source.connect(processor); processor.connect(globalAudioCtx.destination);
+        processor.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0);
+            let sum = 0.0;
+            for (let i = 0; i < input.length; ++i) sum += input[i] * input[i];
+            const volume = Math.sqrt(sum / input.length) * 100;
+            const segments = document.querySelectorAll(`#vu-${id} .vu-bar`);
+            const ativos = Math.min(segments.length, Math.floor(volume / 3));
+            segments.forEach((seg, idx) => {
+                seg.style.background = idx < ativos ? (idx > 13 ? 'var(--accent-red)' : idx > 10 ? 'orange' : 'var(--accent-green)') : '#1e293b';
+            });
+        };
+    }
+</script>
+</body>
+</html>

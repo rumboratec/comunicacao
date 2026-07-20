@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC Link - Unidade Remota</title>
+    <style>
+        body { font-family: sans-serif; background: #05070a; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: #0f131a; border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 16px; width: 350px; padding: 32px; text-align: center; }
+        .select-sala { width: 100%; padding: 12px; background: #162238; color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-top: 10px; margin-bottom: 20px; font-weight: bold; }
+        .btn { border: none; padding: 16px; width: 100%; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 10px; text-transform: uppercase; }
+        .btn-connect { background: #00e5ff; color: #000; }
+        .btn-disconnect { background: #e74c3c; color: #fff; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 id="nomeLabel">Unidade Remota</h2>
+    <div id="setupForm">
+        <label style="font-size:12px; color:#52637a; display:block; text-align:left;">ESCOLHA SUA SALA:</label>
+        <select id="salaSelect" class="select-sala">
+            <option value="A">Sala A (Grave - 220Hz)</option>
+            <option value="B">Sala B (Médio - 440Hz)</option>
+            <option value="C">Sala C (Agudo - 880Hz)</option>
+        </select>
+    </div>
+    <div id="statusText" style="color: #52637a; font-weight: bold; margin: 15px 0;">Desconectado do Sistema</div>
+    <button class="btn btn-connect" id="startBtn">Conectar na Sala</button>
+    <button class="btn btn-disconnect" id="stopBtn">Sair da Sala (Desconectar)</button>
+</div>
+
+<script>
+    const NOME_REPORTER = prompt("Identificação do Operador:", "Operador Externa") || "Externa";
+    document.getElementById('nomeLabel').innerText = NOME_REPORTER;
+
+    const SIGNALING_URL = 'ws://192.168.1.20:6071'; 
+    let ws, localStream, peerConnection, audioCtx, currentOsc, currentGain;
+    let salaAtual = 'A';
+    let interrompidoPeloAdmin = false;
+
+    const frequenciasSalas = { 'A': 220, 'B': 440, 'C': 880 };
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+        salaAtual = document.getElementById('salaSelect').value;
+        document.getElementById('statusText').innerText = "Conectando...";
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            ws = new WebSocket(SIGNALING_URL);
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ action: 'registrar', tipo: 'reporter', nome: NOME_REPORTER, sala: salaAtual }));
+                document.getElementById('statusText').innerText = `Conectado na Sala ${salaAtual}`;
+                document.getElementById('setupForm').style.display = 'none';
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'block';
+                tocarTomSala(frequenciasSalas[salaAtual]);
+            };
+
+            ws.onmessage = async (message) => {
+                const data = JSON.parse(message.data);
+
+                if (data.action === 'forcar-desconexao') {
+                    alert(`Conexão Encerrada: ${data.motivo}`);
+                    document.getElementById('stopBtn').click();
+                    return;
+                }
+                if (data.action === 'mudar-sala-remoto') {
+                    salaAtual = data.novaSala;
+                    document.getElementById('statusText').innerText = `Movido para Sala ${salaAtual}`;
+                    if (!interrompidoPeloAdmin) tocarTomSala(frequenciasSalas[salaAtual]);
+                }
+                if (data.action === 'talk') {
+                    interrompidoPeloAdmin = true;
+                    document.getElementById('statusText').innerText = "COORDENAÇÃO FALANDO...";
+                    tocarTomSala(1200);
+                }
+                if (data.action === 'mute') {
+                    interrompidoPeloAdmin = false;
+                    document.getElementById('statusText').innerText = `Conectado na Sala ${salaAtual}`;
+                    tocarTomSala(frequenciasSalas[salaAtual]);
+                }
+                if (data.sdp && data.sdp.type === 'offer') {
+                    peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                    peerConnection.onicecandidate = (e) => {
+                        if (e.candidate) ws.send(JSON.stringify({ target: 'admin', ice: e.candidate }));
+                    };
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    ws.send(JSON.stringify({ target: 'admin', sdp: peerConnection.localDescription }));
+                } else if (data.ice && peerConnection) {
+                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.ice)); } catch(e){}
+                }
+            };
+        } catch(e) { document.getElementById('statusText').innerText = "Erro ao acessar microfone."; }
+    });
+
+    function tocarTomSala(freq) {
+        if (!audioCtx) return;
+        if (currentOsc) { currentOsc.stop(); currentOsc.disconnect(); }
+        if (currentGain) { currentGain.disconnect(); }
+        currentOsc = audioCtx.createOscillator();
+        currentGain = audioCtx.createGain();
+        currentOsc.type = 'sine';
+        currentOsc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        currentGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        currentOsc.connect(currentGain);
+        currentGain.connect(audioCtx.destination);
+        currentOsc.start();
+    }
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+        if(ws) ws.close();
+        if(peerConnection) peerConnection.close();
+        if(localStream) localStream.getTracks().forEach(t => t.stop());
+        if(currentOsc) { currentOsc.stop(); currentOsc.disconnect(); }
+        document.getElementById('setupForm').style.display = 'block';
+        document.getElementById('startBtn').style.display = 'block';
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('statusText').innerText = "Desconectado do Sistema";
+    });
+</script>
+</body>
+</html>
